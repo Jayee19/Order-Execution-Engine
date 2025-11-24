@@ -6,18 +6,21 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 
-# Install dependencies
-RUN npm ci --omit=dev
+# Install ALL dependencies (including dev for building)
+RUN npm ci
 
 # Copy source code
 COPY src ./src
 COPY prisma ./prisma
 
+# Generate Prisma client
+RUN npm run prisma:generate
+
 # Build TypeScript
 RUN npm run build
 
-# Generate Prisma client
-RUN npm run prisma:generate
+# Remove dev dependencies to reduce image size
+RUN npm prune --omit=dev
 
 # Expose port
 EXPOSE 3000
