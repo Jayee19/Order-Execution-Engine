@@ -141,9 +141,9 @@
                 
                 responseDiv.textContent = JSON.stringify(data, null, 2);
                 
-                // Auto-connect WebSocket if not connected
+                // Auto-connect WebSocket if not connected (connect immediately to catch updates)
                 if (!ws || ws.readyState !== WebSocket.OPEN) {
-                    setTimeout(() => connectWebSocket(), 500);
+                    connectWebSocket();
                 }
             } catch (error) {
                 responseDiv.textContent = `Error: ${error.message}`;
