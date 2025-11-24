@@ -110,38 +110,43 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
 
       orderService.subscribeToOrder(orderId, subscriber);
 
-      // Send initial connection message and current order status
-      const sendInitialStatus = async () => {
+      // Send initial connection message
+      try {
+        if (socket.readyState === 1) {
+          socket.send(
+            JSON.stringify({
+              orderId,
+              status: 'connected',
+              message: 'Subscribed to order updates',
+              timestamp: new Date().toISOString(),
+            }),
+          );
+        }
+      } catch (err) {
+        console.error(`Failed to send connection message: ${err}`);
+      }
+
+      // Send current order status asynchronously (don't block connection)
+      (async () => {
         try {
-          if (socket.readyState === 1) {
-            // Send connection confirmation
+          const order = await orderService.getOrder(orderId);
+          if (order && socket.readyState === 1) {
             socket.send(
               JSON.stringify({
                 orderId,
-                status: 'connected',
-                message: 'Subscribed to order updates',
-                timestamp: new Date().toISOString(),
+                status: order.status,
+                timestamp: order.updatedAt.toISOString(),
+                executedPrice: order.executedPrice,
+                txHash: order.txHash,
+                selectedDex: order.selectedDex,
+                message: `Current order status: ${order.status}`,
               }),
             );
 
-            // Send current order status if order exists
-            const order = await orderService.getOrder(orderId);
-            if (order) {
-              socket.send(
-                JSON.stringify({
-                  orderId,
-                  status: order.status,
-                  timestamp: order.updatedAt.toISOString(),
-                  executedPrice: order.executedPrice,
-                  txHash: order.txHash,
-                  selectedDex: order.selectedDex,
-                  message: `Current order status: ${order.status}`,
-                }),
-              );
-
-              // Send recent logs
-              if (order.logs && order.logs.length > 0) {
-                for (const log of order.logs.slice(0, 5).reverse()) {
+            // Send recent logs
+            if (order.logs && order.logs.length > 0) {
+              for (const log of order.logs.slice(0, 5).reverse()) {
+                if (socket.readyState === 1) {
                   socket.send(
                     JSON.stringify({
                       orderId,
@@ -155,35 +160,37 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
             }
           }
         } catch (err) {
-          console.error(`Failed to send initial status: ${err}`);
+          console.error(`Failed to send order status: ${err}`);
         }
-      };
+      })();
 
-      sendInitialStatus();
-
-      // Keep connection alive with ping
-      const pingInterval = setInterval(() => {
-        if (socket.readyState === 1) {
-          try {
-            socket.ping();
-          } catch (err) {
-            console.error(`Ping failed: ${err}`);
-            clearInterval(pingInterval);
+      // Keep connection alive with ping (only if socket supports it)
+      let pingInterval: NodeJS.Timeout | null = null;
+      if (typeof socket.ping === 'function') {
+        pingInterval = setInterval(() => {
+          if (socket.readyState === 1) {
+            try {
+              socket.ping();
+            } catch (err) {
+              console.error(`Ping failed: ${err}`);
+              if (pingInterval) clearInterval(pingInterval);
+            }
+          } else {
+            if (pingInterval) clearInterval(pingInterval);
           }
-        } else {
-          clearInterval(pingInterval);
-        }
-      }, 30000); // Ping every 30 seconds
+        }, 30000); // Ping every 30 seconds
+      }
 
       // Handle disconnect
-      socket.on('close', () => {
-        clearInterval(pingInterval);
+      socket.on('close', (code: number, reason: Buffer) => {
+        if (pingInterval) clearInterval(pingInterval);
         orderService.unsubscribeFromOrder(orderId, subscriber);
+        console.log(`WebSocket closed for order ${orderId}: code=${code}, reason=${reason.toString()}`);
       });
 
       // Handle errors
       socket.on('error', (error: Error) => {
-        clearInterval(pingInterval);
+        if (pingInterval) clearInterval(pingInterval);
         console.error(`WebSocket error for order ${orderId}:`, error);
         orderService.unsubscribeFromOrder(orderId, subscriber);
       });
