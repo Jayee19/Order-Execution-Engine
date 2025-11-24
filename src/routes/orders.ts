@@ -77,5 +77,51 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
       }
     },
   );
+
+  /**
+   * WebSocket /api/orders/:orderId/ws
+   * Subscribe to order updates via WebSocket
+   */
+  app.get<{ Params: { orderId: string } }>(
+    '/api/orders/:orderId/ws',
+    { websocket: true },
+    (connection, request: FastifyRequest<{ Params: { orderId: string } }>) => {
+      const { orderId } = request.params;
+
+      // Subscribe to order updates
+      const subscriber = {
+        send: (data: unknown) => {
+          try {
+            connection.socket.send(JSON.stringify(data));
+          } catch (err) {
+            console.error(`Failed to send WebSocket message: ${err}`);
+          }
+        },
+      };
+
+      orderService.subscribeToOrder(orderId, subscriber);
+
+      // Send initial connection message
+      connection.socket.send(
+        JSON.stringify({
+          orderId,
+          status: 'connected',
+          message: 'Subscribed to order updates',
+          timestamp: new Date().toISOString(),
+        }),
+      );
+
+      // Handle disconnect
+      connection.socket.on('close', () => {
+        orderService.unsubscribeFromOrder(orderId, subscriber);
+      });
+
+      // Handle errors
+      connection.socket.on('error', (error: Error) => {
+        console.error(`WebSocket error for order ${orderId}:`, error);
+        orderService.unsubscribeFromOrder(orderId, subscriber);
+      });
+    },
+  );
 }
 

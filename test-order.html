@@ -152,9 +152,16 @@
 
         function connectWebSocket() {
             const apiUrl = document.getElementById('apiUrl').value;
+            const orderId = document.getElementById('orderId').value || currentOrderId;
+            
+            if (!orderId) {
+                alert('Please submit an order first or enter an Order ID');
+                return;
+            }
+            
             const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
             
-            ws = new WebSocket(`${wsUrl}/api/orders/execute`);
+            ws = new WebSocket(`${wsUrl}/api/orders/${orderId}/ws`);
             const statusDiv = document.getElementById('wsStatus');
             const messagesDiv = document.getElementById('wsMessages');
 
@@ -163,7 +170,7 @@
                 statusDiv.style.color = '#4CAF50';
                 document.getElementById('wsBtn').style.display = 'none';
                 document.getElementById('disconnectBtn').style.display = 'inline-block';
-                messagesDiv.textContent = 'Waiting for order updates...\n';
+                messagesDiv.textContent = `Connected to order ${orderId}\nWaiting for updates...\n`;
             };
 
             ws.onmessage = (event) => {
