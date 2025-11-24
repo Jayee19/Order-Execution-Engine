@@ -24,8 +24,9 @@ RUN npm run prisma:generate
 # Build TypeScript
 RUN npm run build
 
-# Remove dev dependencies to reduce image size
-RUN npm prune --omit=dev
+# Keep Prisma CLI for migrations (needed in production)
+# Remove other dev dependencies to reduce image size
+RUN npm prune --omit=dev --no-save prisma
 
 # Expose port
 EXPOSE 3000
