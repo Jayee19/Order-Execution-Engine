@@ -219,12 +219,13 @@ class OrderService {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       console.error(`[${orderId}] ✗ Order failed: ${errorMessage}`);
 
+      const currentOrder = await prisma.order.findUnique({ where: { orderId } });
       await prisma.order.update({
         where: { orderId },
         data: {
           status: 'failed',
           errorMessage,
-          retryCount: (order?.retryCount ?? 0) + 1,
+          retryCount: (currentOrder?.retryCount ?? 0) + 1,
           updatedAt: new Date(),
         },
       });

@@ -29,29 +29,8 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
         // Enqueue order for processing
         await queueService.enqueueOrder(orderResponse.orderId);
 
-        // Upgrade to WebSocket
-        if (request.ws) {
-          const socket = await request.ws();
-
-          // Subscribe to order updates
-          const subscriber = {
-            send: (data) => {
-              socket.send(JSON.stringify(data));
-            },
-          };
-
-          orderService.subscribeToOrder(orderResponse.orderId, subscriber);
-
-          // Handle WebSocket close
-          socket.on('close', () => {
-            orderService.unsubscribeFromOrder(orderResponse.orderId, subscriber);
-          });
-
-          socket.on('error', (error) => {
-            console.error(`WebSocket error: ${error}`);
-            orderService.unsubscribeFromOrder(orderResponse.orderId, subscriber);
-          });
-        }
+        // Note: WebSocket upgrade happens automatically via Fastify WebSocket plugin
+        // Client should connect to ws://host/api/orders/execute after POST
 
         return reply.code(200).send(orderResponse);
       } catch (error) {

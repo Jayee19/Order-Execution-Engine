@@ -1,5 +1,4 @@
 import { Queue, Worker, QueueEvents } from 'bullmq';
-import { getRedisClient } from '../config/redis.js';
 import { orderService } from './order-service.js';
 import { env } from '../config/env.js';
 
@@ -16,10 +15,16 @@ class QueueService {
    * Initialize the queue and worker
    */
   async initialize(): Promise<void> {
-    const redis = await getRedisClient();
+    // BullMQ connection options
+    const redisUrl = new URL(env.REDIS_URL);
+    const connection = {
+      host: redisUrl.hostname,
+      port: parseInt(redisUrl.port || '6379'),
+      ...(redisUrl.password && { password: redisUrl.password }),
+    };
 
     this.queue = new Queue<OrderJob>('orders', {
-      connection: redis,
+      connection,
       defaultJobOptions: {
         attempts: env.MAX_RETRIES,
         backoff: {
@@ -38,12 +43,12 @@ class QueueService {
         return { success: true };
       },
       {
-        connection: redis,
+        connection,
         concurrency: env.QUEUE_CONCURRENCY,
       },
     );
 
-    this.queueEvents = new QueueEvents('orders', { connection: redis });
+    this.queueEvents = new QueueEvents('orders', { connection });
 
     // Log queue events
     this.worker.on('completed', (job) => {
