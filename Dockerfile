@@ -24,9 +24,11 @@ RUN npm run prisma:generate
 # Build TypeScript
 RUN npm run build
 
-# Keep Prisma CLI for migrations (needed in production)
-# Remove other dev dependencies to reduce image size
-RUN npm prune --omit=dev --no-save prisma
+# Install Prisma CLI globally for migrations (needed in production)
+RUN npm install -g prisma
+
+# Remove dev dependencies to reduce image size
+RUN npm prune --omit=dev
 
 # Expose port
 EXPOSE 3000
