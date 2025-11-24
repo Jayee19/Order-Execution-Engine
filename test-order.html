@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Execution Engine - Test</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 { color: #4CAF50; margin-bottom: 20px; }
+        .container { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        .card {
+            background: #2a2a2a;
+            border-radius: 8px;
+            padding: 20px;
+            border: 1px solid #3a3a3a;
+        }
+        .card h2 { color: #64B5F6; margin-bottom: 15px; font-size: 18px; }
+        input, textarea, button {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 10px;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+        }
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+            font-weight: bold;
+            margin-top: 10px;
+        }
+        button:hover { background: #45a049; }
+        button:disabled { background: #555; cursor: not-allowed; }
+        .response {
+            background: #1a1a1a;
+            border: 1px solid #3a3a3a;
+            border-radius: 4px;
+            padding: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .status { padding: 5px 10px; border-radius: 4px; display: inline-block; margin-bottom: 10px; }
+        .status.pending { background: #FFA726; color: #000; }
+        .status.routing { background: #42A5F5; color: #000; }
+        .status.building { background: #AB47BC; color: #fff; }
+        .status.submitted { background: #26A69A; color: #000; }
+        .status.confirmed { background: #4CAF50; color: #fff; }
+        .status.failed { background: #EF5350; color: #fff; }
+        label { display: block; margin-bottom: 5px; color: #bbb; font-size: 14px; }
+        .url-input { font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h1>🚀 Order Execution Engine - Test Interface</h1>
+    
+    <div class="container">
+        <!-- Submit Order Card -->
+        <div class="card">
+            <h2>Submit Order</h2>
+            <label>API URL:</label>
+            <input type="text" id="apiUrl" class="url-input" value="https://web-production-b488bf.up.railway.app" />
+            
+            <label>Token In (SOL):</label>
+            <input type="text" id="tokenIn" value="So11111111111111111111111111111111111111112" />
+            
+            <label>Token Out (USDC):</label>
+            <input type="text" id="tokenOut" value="EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" />
+            
+            <label>Amount (in smallest unit, e.g., 1000000 = 0.001 SOL):</label>
+            <input type="number" id="amount" value="1000000" />
+            
+            <label>Slippage (0.01 = 1%):</label>
+            <input type="number" id="slippage" step="0.001" value="0.01" />
+            
+            <button onclick="submitOrder()">Submit Order</button>
+            <button onclick="getRecentOrders()">Get Recent Orders</button>
+            
+            <div id="orderResponse" class="response" style="display:none;"></div>
+        </div>
+        
+        <!-- WebSocket Status Card -->
+        <div class="card">
+            <h2>WebSocket Status Updates</h2>
+            <button onclick="connectWebSocket()" id="wsBtn">Connect WebSocket</button>
+            <button onclick="disconnectWebSocket()" id="disconnectBtn" style="display:none;">Disconnect</button>
+            <div id="wsStatus" style="margin: 10px 0; color: #888;">Not connected</div>
+            <div id="wsMessages" class="response"></div>
+        </div>
+    </div>
+    
+    <!-- Order Details Card -->
+    <div class="card" style="margin-top: 20px;">
+        <h2>Order Details</h2>
+        <label>Order ID:</label>
+        <input type="text" id="orderId" placeholder="Paste orderId here" />
+        <button onclick="getOrderDetails()">Get Order Details</button>
+        <div id="orderDetails" class="response" style="display:none;"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentOrderId = null;
+
+        async function submitOrder() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const tokenIn = document.getElementById('tokenIn').value;
+            const tokenOut = document.getElementById('tokenOut').value;
+            const amount = parseFloat(document.getElementById('amount').value);
+            const slippage = parseFloat(document.getElementById('slippage').value);
+
+            const responseDiv = document.getElementById('orderResponse');
+            responseDiv.style.display = 'block';
+            responseDiv.textContent = 'Submitting order...';
+
+            try {
+                const response = await fetch(`${apiUrl}/api/orders/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tokenIn, tokenOut, amount, slippage })
+                });
+
+                const data = await response.json();
+                currentOrderId = data.orderId;
+                document.getElementById('orderId').value = data.orderId;
+                
+                responseDiv.textContent = JSON.stringify(data, null, 2);
+                
+                // Auto-connect WebSocket if not connected
+                if (!ws || ws.readyState !== WebSocket.OPEN) {
+                    setTimeout(() => connectWebSocket(), 500);
+                }
+            } catch (error) {
+                responseDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        function connectWebSocket() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const wsUrl = apiUrl.replace('https://', 'wss://').replace('http://', 'ws://');
+            
+            ws = new WebSocket(`${wsUrl}/api/orders/execute`);
+            const statusDiv = document.getElementById('wsStatus');
+            const messagesDiv = document.getElementById('wsMessages');
+
+            ws.onopen = () => {
+                statusDiv.textContent = '✅ Connected';
+                statusDiv.style.color = '#4CAF50';
+                document.getElementById('wsBtn').style.display = 'none';
+                document.getElementById('disconnectBtn').style.display = 'inline-block';
+                messagesDiv.textContent = 'Waiting for order updates...\n';
+            };
+
+            ws.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    const timestamp = new Date().toLocaleTimeString();
+                    const status = data.status || 'unknown';
+                    
+                    messagesDiv.textContent += `[${timestamp}] Status: ${status}\n`;
+                    messagesDiv.textContent += JSON.stringify(data, null, 2) + '\n\n';
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                } catch (e) {
+                    messagesDiv.textContent += `[${new Date().toLocaleTimeString()}] ${event.data}\n`;
+                }
+            };
+
+            ws.onerror = (error) => {
+                statusDiv.textContent = '❌ Connection Error';
+                statusDiv.style.color = '#EF5350';
+            };
+
+            ws.onclose = () => {
+                statusDiv.textContent = '🔌 Disconnected';
+                statusDiv.style.color = '#888';
+                document.getElementById('wsBtn').style.display = 'inline-block';
+                document.getElementById('disconnectBtn').style.display = 'none';
+            };
+        }
+
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        async function getOrderDetails() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const orderId = document.getElementById('orderId').value;
+            const detailsDiv = document.getElementById('orderDetails');
+            
+            if (!orderId) {
+                alert('Please enter an Order ID');
+                return;
+            }
+
+            detailsDiv.style.display = 'block';
+            detailsDiv.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(`${apiUrl}/api/orders/${orderId}`);
+                const data = await response.json();
+                detailsDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                detailsDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+
+        async function getRecentOrders() {
+            const apiUrl = document.getElementById('apiUrl').value;
+            const responseDiv = document.getElementById('orderResponse');
+            responseDiv.style.display = 'block';
+            responseDiv.textContent = 'Loading...';
+
+            try {
+                const response = await fetch(`${apiUrl}/api/orders`);
+                const data = await response.json();
+                responseDiv.textContent = JSON.stringify(data, null, 2);
+            } catch (error) {
+                responseDiv.textContent = `Error: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>
+

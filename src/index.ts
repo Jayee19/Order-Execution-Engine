@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import fastifyWebsocket from '@fastify/websocket';
+import fastifyCors from '@fastify/cors';
 import { env } from './config/env.js';
 import { getPrismaClient, closePrisma } from './config/database.js';
 import { getRedisClient, closeRedis } from './config/redis.js';
@@ -27,6 +28,12 @@ async function main(): Promise<void> {
     // Create Fastify server
     const app = Fastify({
       logger: env.NODE_ENV === 'development',
+    });
+
+    // Register CORS plugin (allow all origins for public API)
+    await app.register(fastifyCors, {
+      origin: true, // Allow all origins
+      credentials: true,
     });
 
     // Register WebSocket plugin
