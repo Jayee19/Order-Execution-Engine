@@ -87,12 +87,21 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
     { websocket: true },
     (connection, request: FastifyRequest<{ Params: { orderId: string } }>) => {
       const { orderId } = request.params;
+      const socket = connection.socket;
+
+      if (!socket) {
+        console.error(`WebSocket connection failed for order ${orderId}: socket is undefined`);
+        return;
+      }
 
       // Subscribe to order updates
       const subscriber = {
         send: (data: unknown) => {
           try {
-            connection.socket.send(JSON.stringify(data));
+            // WebSocket.OPEN = 1
+            if (socket.readyState === 1) {
+              socket.send(JSON.stringify(data));
+            }
           } catch (err) {
             console.error(`Failed to send WebSocket message: ${err}`);
           }
@@ -102,22 +111,25 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
       orderService.subscribeToOrder(orderId, subscriber);
 
       // Send initial connection message
-      connection.socket.send(
-        JSON.stringify({
-          orderId,
-          status: 'connected',
-          message: 'Subscribed to order updates',
-          timestamp: new Date().toISOString(),
-        }),
-      );
+      // WebSocket.OPEN = 1
+      if (socket.readyState === 1) {
+        socket.send(
+          JSON.stringify({
+            orderId,
+            status: 'connected',
+            message: 'Subscribed to order updates',
+            timestamp: new Date().toISOString(),
+          }),
+        );
+      }
 
       // Handle disconnect
-      connection.socket.on('close', () => {
+      socket.on('close', () => {
         orderService.unsubscribeFromOrder(orderId, subscriber);
       });
 
       // Handle errors
-      connection.socket.on('error', (error: Error) => {
+      socket.on('error', (error: Error) => {
         console.error(`WebSocket error for order ${orderId}:`, error);
         orderService.unsubscribeFromOrder(orderId, subscriber);
       });
