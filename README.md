@@ -2,6 +2,13 @@
 
 A high-performance market order execution engine with real-time DEX routing and WebSocket status updates. Process orders concurrently with automatic failover and comprehensive monitoring.
 
+## 🌐 Live Demo
+
+**Production URL:** https://web-production-b488bf.up.railway.app
+
+- Health Check: https://web-production-b488bf.up.railway.app/health
+- API Base: https://web-production-b488bf.up.railway.app/api
+
 ## ✨ Features
 
 - **Market Order Execution** - Immediate execution at best available price
