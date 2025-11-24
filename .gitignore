@@ -1,0 +1,17 @@
+node_modules/
+dist/
+.env
+.env.local
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/
+*.swp
+build/
+prisma/migrations/
+*.test.ts.snap
+.cache/
+temp/
+tmp/
+

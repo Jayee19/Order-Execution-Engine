@@ -1,0 +1,41 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Order {
+  id              String    @id @default(uuid())
+  orderId         String    @unique
+  status          String    @default("pending")
+  tokenIn         String
+  tokenOut        String
+  amount          Float
+  slippage        Float
+  selectedDex     String?
+  executedPrice   Float?
+  txHash          String?
+  errorMessage    String?
+  retryCount      Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  logs            OrderLog[]
+
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderLog {
+  id        String   @id @default(uuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  status    String
+  message   String?
+  timestamp DateTime @default(now())
+
+  @@index([orderId])
+}
+
