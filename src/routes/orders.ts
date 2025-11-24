@@ -85,12 +85,11 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Params: { orderId: string } }>(
     '/api/orders/:orderId/ws',
     { websocket: true },
-    (connection, request: FastifyRequest<{ Params: { orderId: string } }>) => {
+    (socket: any, request: FastifyRequest<{ Params: { orderId: string } }>) => {
       const { orderId } = request.params;
-      const socket = connection.socket;
 
-      if (!socket) {
-        console.error(`WebSocket connection failed for order ${orderId}: socket is undefined`);
+      if (!socket || typeof socket.send !== 'function') {
+        console.error(`WebSocket connection failed for order ${orderId}: invalid socket`);
         return;
       }
 
