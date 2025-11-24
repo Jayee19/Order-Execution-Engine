@@ -110,26 +110,80 @@ export async function registerOrderRoutes(app: FastifyInstance): Promise<void> {
 
       orderService.subscribeToOrder(orderId, subscriber);
 
-      // Send initial connection message
-      // WebSocket.OPEN = 1
-      if (socket.readyState === 1) {
-        socket.send(
-          JSON.stringify({
-            orderId,
-            status: 'connected',
-            message: 'Subscribed to order updates',
-            timestamp: new Date().toISOString(),
-          }),
-        );
-      }
+      // Send initial connection message and current order status
+      const sendInitialStatus = async () => {
+        try {
+          if (socket.readyState === 1) {
+            // Send connection confirmation
+            socket.send(
+              JSON.stringify({
+                orderId,
+                status: 'connected',
+                message: 'Subscribed to order updates',
+                timestamp: new Date().toISOString(),
+              }),
+            );
+
+            // Send current order status if order exists
+            const order = await orderService.getOrder(orderId);
+            if (order) {
+              socket.send(
+                JSON.stringify({
+                  orderId,
+                  status: order.status,
+                  timestamp: order.updatedAt.toISOString(),
+                  executedPrice: order.executedPrice,
+                  txHash: order.txHash,
+                  selectedDex: order.selectedDex,
+                  message: `Current order status: ${order.status}`,
+                }),
+              );
+
+              // Send recent logs
+              if (order.logs && order.logs.length > 0) {
+                for (const log of order.logs.slice(0, 5).reverse()) {
+                  socket.send(
+                    JSON.stringify({
+                      orderId,
+                      status: log.status,
+                      message: log.message,
+                      timestamp: log.timestamp.toISOString(),
+                    }),
+                  );
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.error(`Failed to send initial status: ${err}`);
+        }
+      };
+
+      sendInitialStatus();
+
+      // Keep connection alive with ping
+      const pingInterval = setInterval(() => {
+        if (socket.readyState === 1) {
+          try {
+            socket.ping();
+          } catch (err) {
+            console.error(`Ping failed: ${err}`);
+            clearInterval(pingInterval);
+          }
+        } else {
+          clearInterval(pingInterval);
+        }
+      }, 30000); // Ping every 30 seconds
 
       // Handle disconnect
       socket.on('close', () => {
+        clearInterval(pingInterval);
         orderService.unsubscribeFromOrder(orderId, subscriber);
       });
 
       // Handle errors
       socket.on('error', (error: Error) => {
+        clearInterval(pingInterval);
         console.error(`WebSocket error for order ${orderId}:`, error);
         orderService.unsubscribeFromOrder(orderId, subscriber);
       });

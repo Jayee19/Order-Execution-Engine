@@ -170,7 +170,7 @@
                 statusDiv.style.color = '#4CAF50';
                 document.getElementById('wsBtn').style.display = 'none';
                 document.getElementById('disconnectBtn').style.display = 'inline-block';
-                messagesDiv.textContent = `Connected to order ${orderId}\nWaiting for updates...\n`;
+                messagesDiv.textContent = `[${new Date().toLocaleTimeString()}] Connected to order ${orderId}\nWaiting for updates...\n\n`;
             };
 
             ws.onmessage = (event) => {
@@ -179,24 +179,46 @@
                     const timestamp = new Date().toLocaleTimeString();
                     const status = data.status || 'unknown';
                     
-                    messagesDiv.textContent += `[${timestamp}] Status: ${status}\n`;
-                    messagesDiv.textContent += JSON.stringify(data, null, 2) + '\n\n';
+                    // Skip connection confirmation messages, but show order status updates
+                    if (data.status === 'connected') {
+                        messagesDiv.textContent += `[${timestamp}] ✅ WebSocket connected\n`;
+                    } else {
+                        messagesDiv.textContent += `[${timestamp}] 📊 Status: ${status.toUpperCase()}\n`;
+                        if (data.message) {
+                            messagesDiv.textContent += `   Message: ${data.message}\n`;
+                        }
+                        if (data.executedPrice) {
+                            messagesDiv.textContent += `   Executed Price: ${data.executedPrice}\n`;
+                        }
+                        if (data.selectedDex) {
+                            messagesDiv.textContent += `   Selected DEX: ${data.selectedDex}\n`;
+                        }
+                        if (data.txHash) {
+                            messagesDiv.textContent += `   Transaction Hash: ${data.txHash}\n`;
+                        }
+                        messagesDiv.textContent += '\n';
+                    }
                     messagesDiv.scrollTop = messagesDiv.scrollHeight;
                 } catch (e) {
                     messagesDiv.textContent += `[${new Date().toLocaleTimeString()}] ${event.data}\n`;
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
                 }
             };
 
             ws.onerror = (error) => {
                 statusDiv.textContent = '❌ Connection Error';
                 statusDiv.style.color = '#EF5350';
+                messagesDiv.textContent += `[${new Date().toLocaleTimeString()}] ❌ WebSocket error occurred\n`;
             };
 
-            ws.onclose = () => {
+            ws.onclose = (event) => {
                 statusDiv.textContent = '🔌 Disconnected';
                 statusDiv.style.color = '#888';
                 document.getElementById('wsBtn').style.display = 'inline-block';
                 document.getElementById('disconnectBtn').style.display = 'none';
+                if (event.code !== 1000) {
+                    messagesDiv.textContent += `[${new Date().toLocaleTimeString()}] ⚠️ Connection closed unexpectedly (code: ${event.code})\n`;
+                }
             };
         }
 
